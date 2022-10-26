@@ -1,0 +1,67 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+
+exporters:
+  prometheus:
+    endpoint: "0.0.0.0:8889"
+    const_labels:
+      label1: value1
+
+  logging:
+
+  zipkin:
+    endpoint: "http://zipkin:9411/api/v2/spans"
+    format: proto
+
+  jaeger:
+    endpoint: jaeger:14250
+    tls:
+      insecure: true
+
+  loki:
+    endpoint: http://loki:3100/loki/api/v1/push
+    headers:
+      "X-Scope-OrgID": acme
+
+processors:
+  batch:
+
+  attributes:
+    actions:
+      - action: insert
+        key: loki.attribute.labels
+        value: http.status_code
+
+  resource:
+    attributes:
+      - action: insert
+        key: loki.attribute.labels
+        value: http.status
+      - action: insert
+        key: loki.resource.labels
+        value: host.name, pod.name
+
+extensions:
+  health_check:
+  pprof:
+    endpoint: :1888
+  zpages:
+    endpoint: :55679
+
+service:
+  extensions: [pprof, zpages, health_check]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [logging, zipkin, jaeger]
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [logging, prometheus]
+    logs:
+      receivers: [otlp]
+      processors: [resource, attributes]
+      exporters: [logging, loki]
