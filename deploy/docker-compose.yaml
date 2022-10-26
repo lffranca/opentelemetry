@@ -26,28 +26,6 @@ services:
     networks:
       - open_telemetry
 
-  otel-collector:
-    build: .
-    image: otel/opentelemetry-collector-contrib:latest
-    volumes:
-      - ${PWD}/dev/otel/otel-collector-config.yaml:/etc/otel-collector-config.yaml
-    ports:
-      - "1888:1888"   # pprof extension
-      - "8888:8888"   # Prometheus metrics exposed by the collector
-      - "8889:8889"   # Prometheus exporter metrics
-      - "13133:13133" # health_check extension
-      - "4317:4317"   # OTLP gRPC receiver
-      - "4318:4318"   # OTLP http receiver
-      - "55679:55679" # zpages extension
-    networks:
-      - open_telemetry
-    command:
-      - "--config=/etc/otel-collector-config.yaml"
-    depends_on:
-      - jaeger
-      - zipkin
-      - loki
-
   prometheus:
     build: .
     image: prom/prometheus
@@ -55,15 +33,6 @@ services:
       - ${PWD}/dev/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
     ports:
       - "9090"
-    networks:
-      - open_telemetry
-
-  grafana:
-    image: grafana/grafana-oss:latest
-    volumes:
-      - open_telemetry_grafana_storage:/var/lib/grafana
-    ports:
-      - "3000:3000"
     networks:
       - open_telemetry
 
@@ -85,88 +54,34 @@ services:
     depends_on:
       - loki
 
-  #######################################
-  # Postgres: The database used by Kong
-  #######################################
-  kong-database:
-    image: postgres:9.6
-    restart: always
-    networks:
-      - open_telemetry
-    environment:
-      POSTGRES_USER: kong
-      POSTGRES_DB: kong
-      POSTGRES_PASSWORD: kong
+  otel-collector:
+    build: .
+    image: otel/opentelemetry-collector-contrib:latest
+    volumes:
+      - ${PWD}/dev/otel/otel-collector-config.yaml:/etc/otel-collector-config.yaml
     ports:
-      - "5432:5432"
-    healthcheck:
-      test: [ "CMD", "pg_isready", "-U", "kong" ]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  #######################################
-  # Kong database migration
-  #######################################
-  kong-migration:
-    image: kong:3.0.0-alpine
-    command: "kong migrations bootstrap"
+      - "1888:1888"   # pprof extension
+      - "8888:8888"   # Prometheus metrics exposed by the collector
+      - "8889:8889"   # Prometheus exporter metrics
+      - "13133:13133" # health_check extension
+      - "4317:4317"   # OTLP gRPC receiver
+      - "4318:4318"   # OTLP http receiver
+      - "55679:55679" # zpages extension
     networks:
       - open_telemetry
-    restart: on-failure
-    environment:
-      KONG_PG_HOST: kong-database
-      KONG_PG_PASSWORD: kong
-    links:
-      - kong-database
+    command:
+      - "--config=/etc/otel-collector-config.yaml"
     depends_on:
-      - kong-database
+      - jaeger
+      - zipkin
+      - prometheus
+      - loki
 
-  #######################################
-  # Kong: The API Gateway
-  #######################################
-  kong:
-    image: kong:3.0.0-alpine
-    restart: always
-    networks:
-      - open_telemetry
-    environment:
-      KONG_PG_HOST: kong-database
-      KONG_PG_PASSWORD: kong
-      KONG_PROXY_LISTEN: 0.0.0.0:8000
-      KONG_PROXY_LISTEN_SSL: 0.0.0.0:8443
-      KONG_ADMIN_LISTEN: 0.0.0.0:8001
-      KONG_PLUGINS: opentelemetry
-    depends_on:
-      - kong-database
-    healthcheck:
-      test: [ "CMD", "curl", "-f", "http://kong:8001" ]
-      interval: 5s
-      timeout: 2s
-      retries: 15
+  grafana:
+    image: grafana/grafana-oss:latest
+    volumes:
+      - open_telemetry_grafana_storage:/var/lib/grafana
     ports:
-      - 8001:8001
-      - 8000:8000
-
-  #######################################
-  # Kong ADMIN
-  #######################################
-  kong-admin:
-    image: pantsel/konga:latest
-    restart: always
+      - "3000:3000"
     networks:
       - open_telemetry
-    environment:
-      TOKEN_SECRET: asdasdasdasd
-      DB_ADAPTER: postgres
-      DB_HOST: kong-database
-      DB_USER: kong
-      DB_PASSWORD: kong
-    depends_on:
-      - kong-database
-    ports:
-      - 1337:1337
-
-
-
-
